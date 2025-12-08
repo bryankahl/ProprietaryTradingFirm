@@ -1,0 +1,25 @@
+# Security (CRITICAL)
+.env
+keys.json
+secrets.py
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+venv/
+env/
+.venv/
+
+# Logs
+*.log
+logs/
+
+# IDE settings (optional but good)
+.vscode/
+.idea/.env
+venv/
+__pycache__/
+*.log

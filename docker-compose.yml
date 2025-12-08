@@ -1,0 +1,16 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb:latest-pg14
+    container_name: sniper_db
+    restart: always
+    environment:
+      POSTGRES_USER: sniper_user
+      POSTGRES_PASSWORD: sniper_password
+      POSTGRES_DB: sniper_db
+    ports:
+      - "5455:5432"  # <--- HOST PORT IS NOW 5455
+    volumes:
+      - sniper_pg_data:/var/lib/postgresql/data
+
+volumes:
+  sniper_pg_data:
