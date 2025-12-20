@@ -28,58 +28,60 @@ class BaseStrategy(ABC):
 
     def is_market_open(self) -> bool:
         """
-        Checks if the NYSE is currently open (09:30 - 16:00 EST, Mon-Fri).
+        Checks if the NYSE is currently open (09:30 - 16:00 EST).
         """
         tz = pytz.timezone('America/New_York')
         now = datetime.now(tz)
         
-        # 0=Monday, 4=Friday, 5=Saturday, 6=Sunday
+        # Weekends
         if now.weekday() > 4:
             return False
             
-        # Market Hours: 09:30 to 16:00
+        # Market Hours
         market_start = now.replace(hour=9, minute=30, second=0, microsecond=0)
         market_end = now.replace(hour=16, minute=0, second=0, microsecond=0)
         
         return market_start <= now <= market_end
 
     async def run(self):
-        """
-        The Main Event Loop.
-        """
         logger.info(f"Starting Strategy: {self.name}")
         self.is_running = True
         
         try:
-            # 1. Initial State Sync
             await self.sync_state()
             
-            # 2. Main Loop
             while self.is_running:
-                # --- MARKET HOURS CHECK ---
-                if not self.is_market_open():
+                # 1. TIME CHECK (Timezone Aware)
+                tz = pytz.timezone('America/New_York')
+                now = datetime.now(tz)
+
+                # --- NEW: HARD EXIT AT 3:50 PM ---
+                # This prevents holding over the weekend or trading into illiquid closings
+                if now.weekday() <= 4 and now.hour == 15 and now.minute >= 50:
                     if self.positions:
-                        logger.warning("MARKET CLOSED with Open Positions! Triggering Emergency Flatten.")
+                        logger.warning("END OF DAY DETECTED (3:50 PM). FLATTENING BOOK.")
                         await self.broker.close_all_positions()
                         await self.sync_state()
-                    
+                        # Sleep until tomorrow morning to avoid re-entering
+                        logger.info("Sleeping until market open...")
+                        await asyncio.sleep(60 * 60) # Sleep 1 hour
+                        continue
+                # ---------------------------------
+
+                if not self.is_market_open():
                     logger.info("Market Closed. Sleeping for 60s...")
                     await asyncio.sleep(60)
                     continue
-                # --------------------------
 
-                # A. Check System Health (Risk)
+                # A. Risk Check
                 await self._check_global_risk()
                 
-                # B. Execute Strategy Logic (The "Brain")
+                # B. Strategy Logic
                 await self.calculate_signals()
                 
-                # C. Wait for next heartbeat (e.g., 1 minute bars)
+                # C. Heartbeat
                 await asyncio.sleep(60) 
                 
-        except RiskException as e:
-            logger.critical(f"STRATEGY HALTED BY RISK MANAGER: {e}")
-            await self.emergency_stop()
         except Exception as e:
             logger.error(f"Strategy Crash: {e}")
             await self.emergency_stop()
