@@ -2,6 +2,8 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
+from datetime import datetime
+import pytz # Required for timezone handling
 
 from core.risk_manager import RiskManager, RiskException
 from execution.broker_interface import BrokerInterface
@@ -24,6 +26,23 @@ class BaseStrategy(ABC):
         # Cache for active positions to reduce API calls
         self.positions: Dict[str, float] = {} 
 
+    def is_market_open(self) -> bool:
+        """
+        Checks if the NYSE is currently open (09:30 - 16:00 EST, Mon-Fri).
+        """
+        tz = pytz.timezone('America/New_York')
+        now = datetime.now(tz)
+        
+        # 0=Monday, 4=Friday, 5=Saturday, 6=Sunday
+        if now.weekday() > 4:
+            return False
+            
+        # Market Hours: 09:30 to 16:00
+        market_start = now.replace(hour=9, minute=30, second=0, microsecond=0)
+        market_end = now.replace(hour=16, minute=0, second=0, microsecond=0)
+        
+        return market_start <= now <= market_end
+
     async def run(self):
         """
         The Main Event Loop.
@@ -37,6 +56,18 @@ class BaseStrategy(ABC):
             
             # 2. Main Loop
             while self.is_running:
+                # --- MARKET HOURS CHECK ---
+                if not self.is_market_open():
+                    if self.positions:
+                        logger.warning("MARKET CLOSED with Open Positions! Triggering Emergency Flatten.")
+                        await self.broker.close_all_positions()
+                        await self.sync_state()
+                    
+                    logger.info("Market Closed. Sleeping for 60s...")
+                    await asyncio.sleep(60)
+                    continue
+                # --------------------------
+
                 # A. Check System Health (Risk)
                 await self._check_global_risk()
                 
@@ -75,16 +106,6 @@ class BaseStrategy(ABC):
         The ONLY way a strategy is allowed to place an order.
         Wraps the Broker call in a Risk Check.
         """
-        # 1. Pre-Trade Risk Check
-        # We estimate trade value roughly using last close or we fetch price.
-        # For speed, we rely on the RiskManager's internal checks mostly.
-        # Here we ask the Risk Manager: "Can I do this?"
-        
-        # Note: We need a rough notional value. For now, we assume 
-        # the strategy knows the price, or we check it.
-        # Let's assume the Strategy passes notional size in future, 
-        # but for now we do a basic check.
-        
         if not self.risk_manager.can_execute_trade(trade_size_notional=qty * 100): # Approximation for now
              logger.warning(f"Order blocked by Risk Manager: {symbol} {qty}")
              return
@@ -99,8 +120,8 @@ class BaseStrategy(ABC):
         """Stops the loop and liquidates if required."""
         self.is_running = False
         logger.critical("EMERGENCY STOP TRIGGERED.")
-        if self.risk_manager.is_tripped:
-            await self.broker.close_all_positions()
+        # Always attempt to flatten on emergency stop for safety
+        await self.broker.close_all_positions()
 
     @abstractmethod
     async def calculate_signals(self):

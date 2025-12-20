@@ -8,9 +8,28 @@ services:
       POSTGRES_PASSWORD: sniper_password
       POSTGRES_DB: sniper_db
     ports:
-      - "5455:5432"  # <--- HOST PORT IS NOW 5455
+      - "5455:5432"
     volumes:
       - sniper_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sniper_user -d sniper_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  trading_bot:
+    build: .
+    container_name: sniper_bot
+    restart: always
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override DB host for internal Docker networking
+      - DB_HOST=timescaledb
+      - DB_PORT=5432
 
 volumes:
   sniper_pg_data:

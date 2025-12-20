@@ -11,21 +11,20 @@ class StatArbPairs(BaseStrategy):
         super().__init__(f"Pairs-{symbol_a}", broker, risk_manager, db)
         self.symbol_a = symbol_a 
         self.symbol_b = symbol_b 
-        self.ingestor = ingestor # <--- Save the ingestor
+        self.ingestor = ingestor 
         
         self.lookback_window = window 
         self.z_score_threshold = 2.1 
         self.trade_qty = 10        
 
     async def calculate_signals(self):
-        logger.info("Analyzing Market...")
+        logger.info(f"Analyzing Market ({self.symbol_a}/{self.symbol_b})...")
         
-        # --- NEW: SIP LIVE DATA ---
-        # Fetch the very latest bars from Alpaca and save to DB
+        # --- SIP LIVE DATA ---
         await self.ingestor.update_live_data([self.symbol_a, self.symbol_b])
-        # --------------------------
+        # ---------------------
 
-        # 1. Fetch bars from DB (Now they are fresh!)
+        # 1. Fetch bars from DB
         bars_a = await self.db.get_latest_bars(self.symbol_a, limit=self.lookback_window)
         bars_b = await self.db.get_latest_bars(self.symbol_b, limit=self.lookback_window)
 
@@ -48,7 +47,14 @@ class StatArbPairs(BaseStrategy):
         
         logger.info(f"Spread: {current_spread:.2f} | Z-Score: {z_score:.2f}")
 
-        # 3. Execution
+        # --- 3. CATASTROPHE CHECK (Broken Correlation) ---
+        if abs(z_score) > 4.5:
+            logger.critical(f"BROKEN CORRELATION DETECTED! Z: {z_score:.2f}. FLATTENING BOOK.")
+            await self.broker.close_all_positions()
+            return # Stop processing
+        # --------------------------------------------------
+
+        # 4. Execution
         if z_score > self.z_score_threshold:
             if self.symbol_a not in self.positions:
                 logger.info("ENTRY SIGNAL: Short A / Long B")

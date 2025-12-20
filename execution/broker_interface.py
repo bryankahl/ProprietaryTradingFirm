@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
-from decimal import Decimal
 from dataclasses import dataclass
 
 @dataclass
@@ -39,6 +38,11 @@ class BrokerInterface(ABC):
                          order_type: str = "market", 
                          limit_price: Optional[float] = None) -> Dict:
         """Submit an order to the broker."""
+        pass
+    
+    @abstractmethod
+    async def close_position(self, symbol: str):
+        """Close the position for a specific symbol."""
         pass
 
     @abstractmethod

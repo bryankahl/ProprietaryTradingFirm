@@ -1,0 +1,9 @@
+alpaca-trade-api
+asyncpg
+pandas
+numpy
+python-dotenv
+plotly
+streamlit
+streamlit-autorefresh
+pytz
