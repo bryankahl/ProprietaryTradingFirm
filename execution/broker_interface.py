@@ -34,6 +34,11 @@ class BrokerInterface(ABC):
         pass
 
     @abstractmethod
+    async def get_last_price(self, symbol: str) -> float:
+        """Fetch the most recent trade price instantly."""
+        pass
+
+    @abstractmethod
     async def submit_order(self, symbol: str, qty: float, side: str, 
                          order_type: str = "market", 
                          limit_price: Optional[float] = None) -> Dict:

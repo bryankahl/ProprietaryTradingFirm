@@ -63,6 +63,15 @@ class AlpacaAdapter(BrokerInterface):
             logger.error(f"Error fetching positions: {e}")
             raise e
 
+    async def get_last_price(self, symbol: str) -> float:
+        try:
+            # Fetch the last trade (snapshot)
+            trade = await self._run_sync(self.api.get_latest_trade, symbol)
+            return float(trade.price)
+        except Exception as e:
+            logger.error(f"Price fetch failed for {symbol}: {e}")
+            return 0.0
+
     async def submit_order(self, symbol: str, qty: float, side: str, 
                          order_type: str = "market", 
                          limit_price: float = None) -> dict:
@@ -85,14 +94,10 @@ class AlpacaAdapter(BrokerInterface):
             raise e
 
     async def close_position(self, symbol: str):
-        """Closes a specific position using Alpaca's DELETE endpoint."""
         try:
-            # Check if we even have it first to avoid 404 errors cluttering logs
-            # (Optional, but cleaner. Alpaca throws error if not found)
             await self._run_sync(self.api.close_position, symbol)
             logger.info(f"Closed Position: {symbol}")
         except Exception as e:
-            # We log warning but don't crash, because maybe it was already closed
             logger.warning(f"Failed to close {symbol} (may not exist): {e}")
 
     async def close_all_positions(self):
