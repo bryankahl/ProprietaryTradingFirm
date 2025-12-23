@@ -16,7 +16,7 @@ class StatArbPairs(BaseStrategy):
         self.lookback_window = window 
         self.z_score_threshold = 2.1 
         
-        # IN-MEMORY HISTORY (The "Speed" Fix)
+        # IN-MEMORY HISTORY
         self.spread_history = deque(maxlen=window)
         self.initialized = False
         
@@ -75,11 +75,13 @@ class StatArbPairs(BaseStrategy):
         if abs(z_score) > 4.0:
             if self.positions:
                 logger.critical(f"BROKEN CORRELATION (Z={z_score:.2f}). Emergency Exit.")
-                await self.broker.close_all_positions()
+                # FIX: ONLY CLOSE THIS PAIR
+                await self.broker.close_position(self.symbol_a)
+                await self.broker.close_position(self.symbol_b)
                 self.positions.clear()
             return
 
-        # --- EXECUTION LOGIC (DOLLAR NEUTRAL) ---
+        # --- EXECUTION LOGIC ---
         qty_a = int(self.target_position_value // price_a)
         qty_b = int(self.target_position_value // price_b)
 
@@ -104,6 +106,8 @@ class StatArbPairs(BaseStrategy):
         elif abs(z_score) < 0.5:
             # EXIT (Mean Reversion)
             if self.symbol_a in self.positions or self.symbol_b in self.positions:
-                logger.info("EXIT SIGNAL: Mean Reversion. Closing all.")
-                await self.broker.close_all_positions()
+                logger.info("EXIT SIGNAL: Mean Reversion. Closing pair.")
+                # FIX: ONLY CLOSE THIS PAIR
+                await self.broker.close_position(self.symbol_a)
+                await self.broker.close_position(self.symbol_b)
                 self.positions.clear()
