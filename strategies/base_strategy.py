@@ -12,6 +12,10 @@ from data.timescale_repo import TimescaleRepo
 logger = logging.getLogger("BaseStrategy")
 
 class BaseStrategy(ABC):
+    """
+    The Abstract Base Class for all trading strategies.
+    Enforces Risk Management checks before every execution.
+    """
     def __init__(self, name: str, broker: BrokerInterface, risk_manager: RiskManager, db: TimescaleRepo):
         self.name = name
         self.broker = broker
@@ -38,7 +42,7 @@ class BaseStrategy(ABC):
         return market_start <= now <= market_end
 
     async def run(self):
-        logger.info(f"Starting Strategy: {self.name} (Forever Mode)")
+        logger.info(f"Starting Strategy: {self.name} (Professional Pace)")
         self.is_running = True
         
         try:
@@ -49,7 +53,6 @@ class BaseStrategy(ABC):
                 now = datetime.now(tz)
 
                 # 1. END OF DAY EXIT (3:50 PM)
-                # Forces a clean exit 10 mins before close.
                 if now.weekday() <= 4 and now.hour == 15 and now.minute >= 50:
                     if self.positions:
                         logger.warning("END OF DAY DETECTED (3:50 PM). FLATTENING BOOK.")
@@ -61,7 +64,6 @@ class BaseStrategy(ABC):
                         continue
 
                 # 2. MARKET HOURS CHECK
-                # If market is closed, sleep and check again later.
                 if not self.is_market_open():
                     # Check every 5 minutes if the market has opened
                     logger.info("Market is Closed. Sleeping for 5 mins...")
@@ -72,8 +74,9 @@ class BaseStrategy(ABC):
                 await self._check_global_risk()
                 await self.calculate_signals()
                 
-                # Heartbeat (Speed: 5 Seconds)
-                await asyncio.sleep(5) 
+                # --- HEARTBEAT SET TO 60 SECONDS ---
+                # This aligns the execution speed with the math (Mean Reversion).
+                await asyncio.sleep(60) 
                 
         except Exception as e:
             logger.error(f"Strategy Crash: {e}")
